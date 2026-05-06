@@ -4,59 +4,36 @@
 
 {% block content %}
 <section class="workspace" data-page="browse">
-  <aside class="filters-panel">
-    <div class="section-head">
-      <h1>Browse</h1>
-      <button class="ghost-button" id="clear-filters" type="button">Clear</button>
-    </div>
-    <label>
-      Course
-      <select id="course-filter">
-        <option value="">All courses</option>
-      </select>
-    </label>
-    <label>
-      Branch
-      <select id="branch-filter">
-        <option value="">All branches</option>
-      </select>
-    </label>
-    <label>
-      Exam
-      <select id="exam-category-filter">
-        <option value="">All exams</option>
-      </select>
-    </label>
-    <label>
-      Session
-      <select id="session-filter">
-        <option value="">All sessions</option>
-      </select>
-    </label>
-    <label>
-      Semester
-      <select id="semester-filter">
-        <option value="">All semesters</option>
-      </select>
-    </label>
-    <label>
-      Year
-      <select id="year-filter">
-        <option value="">All years</option>
-      </select>
-    </label>
-  </aside>
-
   <section class="results-shell">
     <div class="section-head">
       <h2>Papers</h2>
       <span id="result-count">0 papers</span>
     </div>
+    <div class="filter-toolbar">
+      <button class="ghost-button filter-toggle" id="open-filters" type="button">Filter</button>
+      <button class="ghost-button" id="clear-filters" type="button">Clear all</button>
+    </div>
+    <div id="active-filters" class="filter-chips" aria-live="polite"></div>
     <div id="result-status" class="result-status" aria-live="polite"></div>
     <div id="results" class="paper-list" aria-live="polite"></div>
     <div class="results-actions">
       <button class="ghost-button" id="load-more" type="button" hidden>Load more</button>
     </div>
   </section>
+
+  <aside class="filter-drawer" id="filter-drawer" hidden>
+    <div class="filter-backdrop" data-filter-close></div>
+    <section class="filter-dialog" aria-labelledby="filter-title">
+      <header class="filter-dialog-head">
+        <h2 id="filter-title">Filter papers</h2>
+        <button class="ghost-button" type="button" data-filter-close>Close</button>
+      </header>
+      <div class="checkbox-groups" id="filter-groups"></div>
+      <footer class="filter-dialog-actions">
+        <button class="download-button" id="apply-filters" type="button">View results</button>
+        <button class="ghost-button" id="drawer-clear-filters" type="button">Clear all</button>
+      </footer>
+    </section>
+  </aside>
 </section>
 {% endblock %}

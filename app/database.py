@@ -7,6 +7,9 @@ from typing import Any
 from app.config import get_settings
 
 
+FilterValue = str | list[str] | None
+
+
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS papers (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -15,6 +18,7 @@ CREATE TABLE IF NOT EXISTS papers (
     ftp_path    TEXT NOT NULL UNIQUE,
     course      TEXT,
     branch      TEXT,
+    display_branch TEXT,
     department  TEXT,
     subject     TEXT,
     year        TEXT,
@@ -31,6 +35,7 @@ CREATE TABLE IF NOT EXISTS papers (
 INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_course ON papers(course);
 CREATE INDEX IF NOT EXISTS idx_branch ON papers(branch);
+CREATE INDEX IF NOT EXISTS idx_display_branch ON papers(display_branch);
 CREATE INDEX IF NOT EXISTS idx_department ON papers(department);
 CREATE INDEX IF NOT EXISTS idx_subject ON papers(subject);
 CREATE INDEX IF NOT EXISTS idx_year ON papers(year);
@@ -44,6 +49,7 @@ SCHEMA = CREATE_TABLE + INDEXES
 METADATA_COLUMNS = {
     "course": "TEXT",
     "branch": "TEXT",
+    "display_branch": "TEXT",
     "season": "TEXT",
     "session": "TEXT",
     "semester": "TEXT",
@@ -88,11 +94,11 @@ def upsert_paper(paper: dict[str, Any]) -> None:
         conn.execute(
             """
             INSERT INTO papers (
-                filename, filepath, ftp_path, course, branch, department, subject,
+                filename, filepath, ftp_path, course, branch, display_branch, department, subject,
                 year, season, session, semester, exam_category, exam_type, file_size
             )
             VALUES (
-                :filename, :filepath, :ftp_path, :course, :branch, :department, :subject,
+                :filename, :filepath, :ftp_path, :course, :branch, :display_branch, :department, :subject,
                 :year, :season, :session, :semester, :exam_category, :exam_type, :file_size
             )
             ON CONFLICT(ftp_path) DO UPDATE SET
@@ -100,6 +106,7 @@ def upsert_paper(paper: dict[str, Any]) -> None:
                 filepath=excluded.filepath,
                 course=excluded.course,
                 branch=excluded.branch,
+                display_branch=excluded.display_branch,
                 department=excluded.department,
                 subject=excluded.subject,
                 year=excluded.year,
@@ -123,11 +130,11 @@ def bulk_upsert_papers(papers: list[dict[str, Any]]) -> int:
         conn.executemany(
             """
             INSERT INTO papers (
-                filename, filepath, ftp_path, course, branch, department, subject,
+                filename, filepath, ftp_path, course, branch, display_branch, department, subject,
                 year, season, session, semester, exam_category, exam_type, file_size
             )
             VALUES (
-                :filename, :filepath, :ftp_path, :course, :branch, :department, :subject,
+                :filename, :filepath, :ftp_path, :course, :branch, :display_branch, :department, :subject,
                 :year, :season, :session, :semester, :exam_category, :exam_type, :file_size
             )
             ON CONFLICT(ftp_path) DO UPDATE SET
@@ -135,6 +142,7 @@ def bulk_upsert_papers(papers: list[dict[str, Any]]) -> int:
                 filepath=excluded.filepath,
                 course=excluded.course,
                 branch=excluded.branch,
+                display_branch=excluded.display_branch,
                 department=excluded.department,
                 subject=excluded.subject,
                 year=excluded.year,
@@ -152,14 +160,12 @@ def bulk_upsert_papers(papers: list[dict[str, Any]]) -> int:
 
 
 def list_papers(
-    course: str | None = None,
-    branch: str | None = None,
+    course: FilterValue = None,
+    branch: FilterValue = None,
     department: str | None = None,
     subject: str | None = None,
-    year: str | None = None,
-    session: str | None = None,
-    semester: str | None = None,
-    exam_category: str | None = None,
+    year: FilterValue = None,
+    exam_category: FilterValue = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
@@ -169,8 +175,6 @@ def list_papers(
         department=department,
         subject=subject,
         year=year,
-        session=session,
-        semester=semester,
         exam_category=exam_category,
     )
     params.update({"limit": limit, "offset": offset})
@@ -189,56 +193,62 @@ def list_papers(
 
 
 def paper_filter_clause(
-    course: str | None = None,
-    branch: str | None = None,
+    course: FilterValue = None,
+    branch: FilterValue = None,
     department: str | None = None,
     subject: str | None = None,
-    year: str | None = None,
-    session: str | None = None,
-    semester: str | None = None,
-    exam_category: str | None = None,
+    year: FilterValue = None,
+    exam_category: FilterValue = None,
 ) -> tuple[str, dict[str, Any]]:
     filters: list[str] = []
     params: dict[str, Any] = {}
 
-    if course:
-        filters.append("course = :course")
-        params["course"] = course
-    if branch:
-        filters.append("branch = :branch")
-        params["branch"] = branch
+    add_filter(filters, params, "course", course)
+    add_filter(filters, params, "branch", branch)
     if department:
         filters.append("department = :department")
         params["department"] = department
     if subject:
         filters.append("subject = :subject")
         params["subject"] = subject
-    if year:
-        filters.append("year = :year")
-        params["year"] = year
-    if session:
-        filters.append("session = :session")
-        params["session"] = session
-    if semester:
-        filters.append("semester = :semester")
-        params["semester"] = semester
-    if exam_category:
-        filters.append("exam_category = :exam_category")
-        params["exam_category"] = exam_category
+    add_filter(filters, params, "year", year)
+    add_filter(filters, params, "exam_category", exam_category)
 
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     return where, params
 
 
+def normalized_values(value: FilterValue) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    return [item for item in value if item]
+
+
+def add_filter(filters: list[str], params: dict[str, Any], column: str, value: FilterValue) -> None:
+    values = normalized_values(value)
+    if not values:
+        return
+    if len(values) == 1:
+        filters.append(f"{column} = :{column}")
+        params[column] = values[0]
+        return
+    placeholders = []
+    for index, item in enumerate(values):
+        key = f"{column}_{index}"
+        placeholders.append(f":{key}")
+        params[key] = item
+    filters.append(f"{column} IN ({', '.join(placeholders)})")
+
+
 def count_papers(
-    course: str | None = None,
-    branch: str | None = None,
+    course: FilterValue = None,
+    branch: FilterValue = None,
     department: str | None = None,
     subject: str | None = None,
-    year: str | None = None,
-    session: str | None = None,
-    semester: str | None = None,
-    exam_category: str | None = None,
+    year: FilterValue = None,
+    exam_category: FilterValue = None,
 ) -> int:
     where, params = paper_filter_clause(
         course=course,
@@ -246,8 +256,6 @@ def count_papers(
         department=department,
         subject=subject,
         year=year,
-        session=session,
-        semester=semester,
         exam_category=exam_category,
     )
     with connect() as conn:
@@ -261,26 +269,64 @@ def count_papers(
     return int(row["total"])
 
 
-def search_papers(query: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+def search_clause(query: str) -> tuple[str, dict[str, Any]]:
     term = query.strip()
     like = f"%{term}%"
     prefix = f"{term}%"
+    return (
+        """
+        (
+            filename LIKE :query
+            OR ftp_path LIKE :query
+            OR course LIKE :query
+            OR branch LIKE :query
+            OR display_branch LIKE :query
+            OR department LIKE :query
+            OR subject LIKE :query
+            OR year LIKE :query
+            OR season LIKE :query
+            OR session LIKE :query
+            OR semester LIKE :query
+            OR exam_category LIKE :query
+            OR exam_type LIKE :query
+        )
+        """,
+        {
+            "term": term,
+            "filename": f"{term}.pdf",
+            "query": like,
+            "prefix": prefix,
+        },
+    )
+
+
+def search_papers(
+    query: str,
+    course: FilterValue = None,
+    branch: FilterValue = None,
+    year: FilterValue = None,
+    exam_category: FilterValue = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    filter_where, filter_params = paper_filter_clause(
+        course=course,
+        branch=branch,
+        year=year,
+        exam_category=exam_category,
+    )
+    search_where, search_params = search_clause(query)
+    clauses = [search_where]
+    if filter_where:
+        clauses.append(filter_where.removeprefix("WHERE "))
+    where = f"WHERE {' AND '.join(clauses)}"
+    params = {**filter_params, **search_params, "limit": limit, "offset": offset}
+
     with connect() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT * FROM papers
-            WHERE filename LIKE :query
-               OR ftp_path LIKE :query
-               OR course LIKE :query
-               OR branch LIKE :query
-               OR department LIKE :query
-               OR subject LIKE :query
-               OR year LIKE :query
-               OR season LIKE :query
-               OR session LIKE :query
-               OR semester LIKE :query
-               OR exam_category LIKE :query
-               OR exam_type LIKE :query
+            {where}
             ORDER BY
                 CASE
                     WHEN subject = :term COLLATE NOCASE THEN 0
@@ -291,6 +337,7 @@ def search_papers(query: str, limit: int = 50, offset: int = 0) -> list[dict[str
                     WHEN filename LIKE :query THEN 2
                     WHEN semester LIKE :query THEN 3
                     WHEN session LIKE :query THEN 4
+                    WHEN display_branch LIKE :query THEN 5
                     WHEN branch LIKE :query THEN 5
                     WHEN ftp_path LIKE :query THEN 6
                     ELSE 7
@@ -302,38 +349,38 @@ def search_papers(query: str, limit: int = 50, offset: int = 0) -> list[dict[str
                 filename
             LIMIT :limit OFFSET :offset
             """,
-            {
-                "term": term,
-                "filename": f"{term}.pdf",
-                "query": like,
-                "prefix": prefix,
-                "limit": limit,
-                "offset": offset,
-            },
+            params,
         ).fetchall()
     return [row_to_dict(row) for row in rows]
 
 
-def count_search_papers(query: str) -> int:
-    like = f"%{query.strip()}%"
+def count_search_papers(
+    query: str,
+    course: FilterValue = None,
+    branch: FilterValue = None,
+    year: FilterValue = None,
+    exam_category: FilterValue = None,
+) -> int:
+    filter_where, filter_params = paper_filter_clause(
+        course=course,
+        branch=branch,
+        year=year,
+        exam_category=exam_category,
+    )
+    search_where, search_params = search_clause(query)
+    clauses = [search_where]
+    if filter_where:
+        clauses.append(filter_where.removeprefix("WHERE "))
+    where = f"WHERE {' AND '.join(clauses)}"
+    params = {**filter_params, **search_params}
+
     with connect() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT COUNT(*) AS total FROM papers
-            WHERE filename LIKE :query
-               OR ftp_path LIKE :query
-               OR course LIKE :query
-               OR branch LIKE :query
-               OR department LIKE :query
-               OR subject LIKE :query
-               OR year LIKE :query
-               OR season LIKE :query
-               OR session LIKE :query
-               OR semester LIKE :query
-               OR exam_category LIKE :query
-               OR exam_type LIKE :query
+            {where}
             """,
-            {"query": like},
+            params,
         ).fetchone()
     return int(row["total"])
 
@@ -344,10 +391,11 @@ def get_paper(paper_id: int) -> dict[str, Any] | None:
     return row_to_dict(row) if row else None
 
 
-def distinct_values(column: str, filters: dict[str, str | None] | None = None) -> list[str]:
+def distinct_values(column: str, filters: dict[str, FilterValue] | None = None) -> list[str]:
     allowed = {
         "course",
         "branch",
+        "display_branch",
         "department",
         "subject",
         "year",
@@ -362,11 +410,10 @@ def distinct_values(column: str, filters: dict[str, str | None] | None = None) -
 
     filters = filters or {}
     clauses = [f"{column} IS NOT NULL", f"{column} != ''"]
-    params: dict[str, str] = {}
+    params: dict[str, Any] = {}
     for key, value in filters.items():
-        if key in allowed and value:
-            clauses.append(f"{key} = :{key}")
-            params[key] = value
+        if key in allowed:
+            add_filter(clauses, params, key, value)
 
     with connect() as conn:
         rows = conn.execute(
@@ -379,3 +426,20 @@ def distinct_values(column: str, filters: dict[str, str | None] | None = None) -
             params,
         ).fetchall()
     return [row["value"] for row in rows]
+
+
+def branch_options(course: FilterValue = None) -> list[dict[str, str]]:
+    where, params = paper_filter_clause(course=course)
+    prefix = "WHERE" if not where else f"{where} AND"
+    with connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT branch AS value, COALESCE(display_branch, branch) AS label
+            FROM papers
+            {prefix} branch IS NOT NULL AND branch != ''
+            GROUP BY branch, display_branch
+            ORDER BY label
+            """,
+            params,
+        ).fetchall()
+    return [row_to_dict(row) for row in rows]

@@ -6,7 +6,7 @@
 <section class="workspace" data-page="search">
   <div class="panel intro-panel">
     <p class="eyebrow">Previous year question papers</p>
-    <h1>Find the Paper that you need .</h1>
+    <h1>Find the paper that you need.</h1>
     <form class="searchbar" id="search-form">
       <input id="search-input" name="q" type="search" placeholder="Subject, paper name, branch, year" autocomplete="off" required>
       <button type="submit">Search</button>
@@ -18,11 +18,31 @@
       <h2>Results</h2>
       <span id="result-count">0 papers</span>
     </div>
+    <div class="filter-toolbar">
+      <button class="ghost-button filter-toggle" id="open-filters" type="button">Filter</button>
+      <button class="ghost-button" id="clear-filters" type="button">Clear all</button>
+    </div>
+    <div id="active-filters" class="filter-chips" aria-live="polite"></div>
     <div id="result-status" class="result-status" aria-live="polite"></div>
     <div id="results" class="paper-list" aria-live="polite"></div>
     <div class="results-actions">
       <button class="ghost-button" id="load-more" type="button" hidden>Load more</button>
     </div>
   </section>
+
+  <aside class="filter-drawer" id="filter-drawer" hidden>
+    <div class="filter-backdrop" data-filter-close></div>
+    <section class="filter-dialog" aria-labelledby="filter-title">
+      <header class="filter-dialog-head">
+        <h2 id="filter-title">Filter papers</h2>
+        <button class="ghost-button" type="button" data-filter-close>Close</button>
+      </header>
+      <div class="checkbox-groups" id="filter-groups"></div>
+      <footer class="filter-dialog-actions">
+        <button class="download-button" id="apply-filters" type="button">View results</button>
+        <button class="ghost-button" id="drawer-clear-filters" type="button">Clear all</button>
+      </footer>
+    </section>
+  </aside>
 </section>
 {% endblock %}

@@ -48,6 +48,13 @@ EXAM_PATTERNS = {
     "makeup": "Make-Up",
 }
 
+BRANCH_REPLACEMENTS = (
+    (re.compile(r"\bARTIFICIAL\s+INTELLGENCE\b"), "ARTIFICIAL INTELLIGENCE"),
+    (re.compile(r"\bEIECTRONICS\b"), "ELECTRONICS"),
+    (re.compile(r"\bENGG\.?\b"), "ENGINEERING"),
+    (re.compile(r"\bTECH\.?\b"), "TECHNOLOGY"),
+)
+
 
 @dataclass(frozen=True)
 class FtpEntry:
@@ -77,6 +84,34 @@ def clean_label(value: str) -> str:
     label = re.sub(r"\.pdf$", "", label, flags=re.IGNORECASE)
     label = re.sub(r"\s+", " ", label).strip()
     return label or value
+
+
+def title_label(value: str | None) -> str | None:
+    if not value:
+        return None
+    words = []
+    for word in clean_label(value).split(" "):
+        if word in {"BBA", "BCA", "MCA", "MBA"}:
+            words.append(word)
+        elif word in {"AND", "OF", "IN", "FOR", "II", "III", "IV"}:
+            words.append(word.lower())
+        else:
+            words.append(word[:1].upper() + word[1:].lower())
+    return " ".join(words)
+
+
+def normalize_branch_name(branch: str | None) -> str | None:
+    if not branch:
+        return None
+
+    value = clean_label(branch).upper()
+    value = re.sub(r"\bII\s*,?\s*III\s*&\s*IV\s*YEAR\b", "", value)
+    value = re.sub(r"\bI{1,3}\s*&\s*IV\s*YEAR\b", "", value)
+    value = re.sub(r"\bYEAR\b", "", value)
+    for pattern, replacement in BRANCH_REPLACEMENTS:
+        value = pattern.sub(replacement, value)
+    value = re.sub(r"\s+", " ", value).strip(" .,-")
+    return title_label(value)
 
 
 def normalize_year(value: str | None) -> str | None:
@@ -165,6 +200,7 @@ def infer_metadata(ftp_path: str, size: int | None = None) -> dict[str, str | in
         "ftp_path": ftp_path,
         "course": course,
         "branch": branch,
+        "display_branch": normalize_branch_name(branch),
         "department": branch,
         "subject": subject,
         "year": year,

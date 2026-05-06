@@ -17,6 +17,7 @@ def main() -> None:
                 "ftp_path": row["ftp_path"],
                 "course": metadata["course"],
                 "branch": metadata["branch"],
+                "display_branch": metadata["display_branch"],
                 "department": metadata["department"],
                 "subject": metadata["subject"],
                 "year": metadata["year"],
@@ -34,6 +35,7 @@ def main() -> None:
             UPDATE papers
             SET course = :course,
                 branch = :branch,
+                display_branch = :display_branch,
                 department = :department,
                 subject = :subject,
                 year = :year,

@@ -14,14 +14,12 @@ router = APIRouter(prefix="/api", tags=["papers"])
 
 @router.get("/papers", response_model=list[Paper])
 def papers(
-    course: str | None = None,
-    branch: str | None = None,
+    course: list[str] | None = Query(default=None),
+    branch: list[str] | None = Query(default=None),
     department: str | None = None,
     subject: str | None = None,
-    year: str | None = None,
-    session: str | None = None,
-    semester: str | None = None,
-    exam_category: str | None = None,
+    year: list[str] | None = Query(default=None),
+    exam_category: list[str] | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
@@ -31,8 +29,6 @@ def papers(
         department=department,
         subject=subject,
         year=year,
-        session=session,
-        semester=semester,
         exam_category=exam_category,
         limit=limit,
         offset=offset,
@@ -41,14 +37,12 @@ def papers(
 
 @router.get("/papers/count", response_model=dict[str, int])
 def papers_count(
-    course: str | None = None,
-    branch: str | None = None,
+    course: list[str] | None = Query(default=None),
+    branch: list[str] | None = Query(default=None),
     department: str | None = None,
     subject: str | None = None,
-    year: str | None = None,
-    session: str | None = None,
-    semester: str | None = None,
-    exam_category: str | None = None,
+    year: list[str] | None = Query(default=None),
+    exam_category: list[str] | None = Query(default=None),
 ) -> dict[str, int]:
     return {
         "total": database.count_papers(
@@ -57,8 +51,6 @@ def papers_count(
             department=department,
             subject=subject,
             year=year,
-            session=session,
-            semester=semester,
             exam_category=exam_category,
         )
     }
@@ -67,15 +59,41 @@ def papers_count(
 @router.get("/papers/search", response_model=list[Paper])
 def search_papers(
     q: str = Query(..., min_length=1),
+    course: list[str] | None = Query(default=None),
+    branch: list[str] | None = Query(default=None),
+    year: list[str] | None = Query(default=None),
+    exam_category: list[str] | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
-    return database.search_papers(q, limit, offset)
+    return database.search_papers(
+        q,
+        course=course,
+        branch=branch,
+        year=year,
+        exam_category=exam_category,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/papers/search/count", response_model=dict[str, int])
-def search_papers_count(q: str = Query(..., min_length=1)) -> dict[str, int]:
-    return {"total": database.count_search_papers(q)}
+def search_papers_count(
+    q: str = Query(..., min_length=1),
+    course: list[str] | None = Query(default=None),
+    branch: list[str] | None = Query(default=None),
+    year: list[str] | None = Query(default=None),
+    exam_category: list[str] | None = Query(default=None),
+) -> dict[str, int]:
+    return {
+        "total": database.count_search_papers(
+            q,
+            course=course,
+            branch=branch,
+            year=year,
+            exam_category=exam_category,
+        )
+    }
 
 
 @router.get("/papers/{paper_id}", response_model=Paper)
@@ -86,18 +104,19 @@ def paper_detail(paper_id: int) -> dict:
     return paper
 
 
-@router.get("/papers/{paper_id}/download")
-def download_paper(paper_id: int):
-    paper = database.get_paper(paper_id)
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
+def _pdf_response(paper: dict, disposition: str):
+    filename = paper["filename"].replace('"', "")
 
     if paper.get("filepath"):
         local_path = Path(paper["filepath"])
         if not local_path.is_absolute():
             local_path = get_settings().papers_dir / local_path
         if local_path.exists():
-            return FileResponse(local_path, filename=paper["filename"], media_type="application/pdf")
+            return FileResponse(
+                local_path,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+            )
 
     try:
         content = fetch_ftp_file(paper["ftp_path"])
@@ -107,8 +126,24 @@ def download_paper(paper_id: int):
     return Response(
         content=content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{paper["filename"]}"'},
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
     )
+
+
+@router.get("/papers/{paper_id}/preview")
+def preview_paper(paper_id: int):
+    paper = database.get_paper(paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    return _pdf_response(paper, "inline")
+
+
+@router.get("/papers/{paper_id}/download")
+def download_paper(paper_id: int):
+    paper = database.get_paper(paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    return _pdf_response(paper, "attachment")
 
 
 @router.get("/departments", response_model=list[str])
@@ -122,12 +157,20 @@ def courses() -> list[str]:
 
 
 @router.get("/branches", response_model=list[str])
-def branches(course: str | None = None) -> list[str]:
+def branches(course: list[str] | None = Query(default=None)) -> list[str]:
     return database.distinct_values("branch", {"course": course})
 
 
+@router.get("/branch-options", response_model=list[dict[str, str]])
+def branch_options(course: list[str] | None = Query(default=None)) -> list[dict[str, str]]:
+    return database.branch_options(course)
+
+
 @router.get("/exam-categories", response_model=list[str])
-def exam_categories(course: str | None = None, branch: str | None = None) -> list[str]:
+def exam_categories(
+    course: list[str] | None = Query(default=None),
+    branch: list[str] | None = Query(default=None),
+) -> list[str]:
     return database.distinct_values("exam_category", {"course": course, "branch": branch})
 
 
@@ -168,9 +211,9 @@ def subjects(branch: str | None = None, semester: str | None = None) -> list[str
 
 @router.get("/years", response_model=list[str])
 def years(
-    course: str | None = None,
-    branch: str | None = None,
-    exam_category: str | None = None,
+    course: list[str] | None = Query(default=None),
+    branch: list[str] | None = Query(default=None),
+    exam_category: list[str] | None = Query(default=None),
     semester: str | None = None,
 ) -> list[str]:
     return database.distinct_values(

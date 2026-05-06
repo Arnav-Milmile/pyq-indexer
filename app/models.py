@@ -10,6 +10,7 @@ class Paper(BaseModel):
     ftp_path: str
     course: str | None = None
     branch: str | None = None
+    display_branch: str | None = None
     department: str | None = None
     subject: str | None = None
     year: str | None = None
@@ -27,6 +28,7 @@ class Paper(BaseModel):
 class PaperFilters(BaseModel):
     course: str | None = None
     branch: str | None = None
+    display_branch: str | None = None
     department: str | None = None
     subject: str | None = None
     year: str | None = None

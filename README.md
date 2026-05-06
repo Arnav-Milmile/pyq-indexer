@@ -14,12 +14,14 @@ https://rcoem-previousyearpapers.up.railway.app/
 
 - SQLite-backed index of 11,000+ PDF papers
 - Search prioritizes paper/subject title matches before branch or path matches
-- Browse by course, branch, exam category, session, semester, and year
-- Dynamic metadata parser for inconsistent FTP folder names
+- Advanced filtering with multiple selection support for course, branch, exam category, and year
+- Filter chips show active filters with easy removal
+- Modal-based PDF preview with dedicated viewer
 - Direct download endpoint that proxies files from FTP
 - Responsive HTML, CSS, and vanilla JavaScript frontend
 - FastAPI-generated API documentation available at `/docs`
 - Railway deployment config included
+- Scheduled GitHub Actions workflow for periodic index refreshes
 
 ## Architecture
 
@@ -54,11 +56,15 @@ app/
     papers.py          JSON API and download routes
   sync/
     ftp_sync.py        FTP traversal, retry logic, metadata parser
+.github/
+  workflows/
+    scheduled-sync.yml Refreshes the SQLite index every two months
 data/
   papers.db            SQLite paper index
   papers/              Optional local PDF cache
 docs/
   implementation-plan.txt
+  scheduled-sync.md
 static/
   css/style.css
   js/app.js
@@ -93,6 +99,8 @@ Rebuild metadata labels from existing FTP paths without scanning FTP again:
 ```powershell
 python rebuild_metadata.py
 ```
+
+The repository also includes a GitHub Actions workflow that refreshes the index every two months. See `docs/scheduled-sync.md`.
 
 ## Run Locally
 
